@@ -1,20 +1,34 @@
-from langchain.memory import ConversationBufferMemory
-# Você pode trocar por LangGraph se preferir um grafo de decisão
-from langchain_google_genai import ChatGoogleGenerativeAI
+# agent.py
 
-class EDAAgent:
-    def __init__(self, df):
-        self.df = df
-        self.memory = ConversationBufferMemory(k=100)
-    def query(self, question):
-        llm = ChatGoogleGerenativeAI(model = "gemini-2.5-flash", temperature=0.1)
-        # Aqui, use seu modelo LLM favorito, template ou lógica simples. Exemplo básico:
-        if "correlação" in question.lower():
-            corr = self.df.corr()
-            return (f"As principais correlações são: {corr.to_string()}", [])
-        elif "fraude" in question.lower():
-            n_fraudes = (self.df['Class'] == 1).sum()
-            rate = n_fraudes / len(self.df)
-            return (f"Número de fraudes detectadas: {n_fraudes} ({rate:.3%})", [])
-        else:
-            return ("Não entendi a pergunta. Reformule ou peça uma análise específica.", [])
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, ToolNode
+from langchain.agents import tool
+from langchain.agents.react.agent import create_react_agent
+
+# Definir ferramentas para o agente (Exemplo: análise descritiva)
+@tool
+def describe_data(df):
+    """Retorna estatísticas descritivas para o dataframe."""
+    return str(df.describe())
+
+# Defina seu modelo
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+
+# Crie o agente ReAct via LangGraph
+tools = [describe_data]
+react_agent = create_react_agent(llm, tools)
+
+# Exemplo de orquestração com LangGraph
+def run_agent(question, df):
+    # Crie o grafo de estados
+    graph = StateGraph()
+    # Adicione o nó do agente (ele pode acionar ferramentas)
+    agent_node = ToolNode(
+        agent=react_agent,
+        tools={'describe_data': lambda: describe_data(df)}
+    )
+    graph.add_node('react_agent', agent_node)
+    graph.set_entry_point('react_agent')
+    # Execute o grafo passando a pergunta
+    result = graph.run({'input': question})
+    return result['output']
