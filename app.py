@@ -3,6 +3,9 @@ import pandas as pd
 from eda_utils import run_quick_eda, plot_eda_figures
 from agent import EDAAgent
 import io, requests, zipfile
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Carregamento de dados
 def load_data(uploaded_file, url, use_demo):
@@ -64,7 +67,7 @@ if df is not None:
     if st.button("Limpar Histórico"): st.session_state.chat_history = []
 
     for role, msg in st.session_state.chat_history:
-        st.markdown(f"**{role}:** {msg}")
+        st.chat_message(f"**{role}:** {msg}")
 
     st.subheader("Análises rápidas")
     for op in ["Descrição", "Correlação", "Outliers", "Distribuição", "Classes"]:

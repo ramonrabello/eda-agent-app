@@ -1,6 +1,11 @@
 streamlit
 pandas
+numpy
 matplotlib
 seaborn
 langchain
+langchain-google-genai
+langchain-openai
+openai
 requests
+python-dotenv
