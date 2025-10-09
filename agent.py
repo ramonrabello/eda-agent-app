@@ -55,20 +55,18 @@ from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_experimental.agents.agent_toolkits import create_csv_agent
 from langchain.agents.agent import RunnableAgentType
 
-
 # Definição e execução de grafos
 from langgraph.graph import StateGraph, END
 
 OUTPUT_DOCUMENTS_DIR:str = 'data/'
+embeddings = None
+vectorstore = None
 
 class EDAAgent:
     
-    vectorstore = None
-    OUTPUT_CSV_DIR = ''
-    embeddings = None
-    
-    def __init__(self, df):
+    def __init__(self, df, embeddings):
         self.df = df
+        self.embeddings = embeddings
         self.memory = ConversationBufferMemory(k=100)
         
     def cria_banco_de_dados_vetorial(file_path:str) -> None:
@@ -77,7 +75,7 @@ class EDAAgent:
             documents = CSVLoader(file_path).load()
 
             # Usando embeddings do OpenAI
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/")
+            #embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
             # Cria um banco de dados vetorial usando Chroma
             split_documents = RecursiveCharacterTextSplitter(chunk_size=480, chunk_overlap=100).split_documents(documents)
@@ -108,17 +106,17 @@ class EDAAgent:
             retriever = vectorstore.as_retriever()
             docs = retriever.invoke(pergunta)
             contexto = "\n\n".join([doc.page_content for doc in docs])
-        return contexto
-        
-    vectorstore = carrega_banco_de_dados_vetorial(f'{OUTPUT_DOCUMENTS_DIR}vectorstore')
-    docs = None
 
-    if vectorstore:
-        retriever = vectorstore.as_retriever()
-        docs = retriever.invoke("Data H")
-        print(docs)
-    else:
-        print("Não foi possível carregar o banco de dados vetorial.")
+            vectorstore = EDAAgent.carrega_banco_de_dados_vetorial(f'{OUTPUT_DOCUMENTS_DIR}vectorstore')
+            docs = None
+
+            if vectorstore:
+                retriever = vectorstore.as_retriever()
+                docs = retriever.invoke(pergunta)
+                print(docs)
+            else:
+                print("Não foi possível carregar o banco de dados vetorial.")
+        return contexto
 
     def agente_langchain(llm:BaseChatModel) -> dict:
         ferramentas = [PythonAstREPLTool()]
@@ -139,7 +137,8 @@ class EDAAgent:
     
     def query(self, question):
         llm = ChatGoogleGenerativeAI(temperature=0, model='gemini-1.5-flash-latest') 
-        #contexto = EDAAgent.busca_na_base_de_documentos(question) or ''
+        contexto = EDAAgent.busca_na_base_de_documentos(question) or ''
+    
         executor_do_agente = EDAAgent.agente_langchain(llm)
         resposta = executor_do_agente.invoke({"input": question, "context": contexto})
         return resposta.get("output", "Não encontrei a resposta")
