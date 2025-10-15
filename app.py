@@ -5,6 +5,7 @@ from agent import EDAAgent
 import io, requests, zipfile, os
 from dotenv import load_dotenv
 from langchain_google_genai.embeddings import GoogleGenerativeAIEmbeddings  # Embeddings
+from langchain_openai.embeddings import OpenAIEmbeddings
 
 load_dotenv()
 
@@ -53,8 +54,8 @@ if df is not None:
     # Seção chat com agente
     st.subheader("Pergunte ao agente sobre os dados 📢")
     if 'eda_agent' not in st.session_state:
-        embeddings = GoogleGenerativeAIEmbeddings(google_api_key=os.environ['GOOGLE_API_KEY'], model="models/embedding-001")
-        st.session_state.eda_agent = EDAAgent(df, embeddings=embeddings)
+        embeddings = OpenAIEmbeddings()
+        st.session_state.eda_agent = EDAAgent(df)
         st.session_state.chat_history = []
     agent = st.session_state.eda_agent
 

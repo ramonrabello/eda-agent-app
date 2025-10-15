@@ -1,6 +1,8 @@
 from langchain.memory import ConversationBufferMemory
 # Você pode trocar por LangGraph se preferir um grafo de decisão
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+import chromadb.utils.embedding_functions as embedding_functions
 from langchain.globals import set_debug
 # Construção de prompts
 from langchain.schema import HumanMessage
@@ -54,19 +56,18 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_experimental.agents.agent_toolkits import create_csv_agent
 from langchain.agents.agent import RunnableAgentType
+import chromadb
 
 # Definição e execução de grafos
 from langgraph.graph import StateGraph, END
 
 OUTPUT_DOCUMENTS_DIR:str = 'data/'
-embeddings = None
 vectorstore = None
 
 class EDAAgent:
     
-    def __init__(self, df, embeddings):
+    def __init__(self, df):
         self.df = df
-        self.embeddings = embeddings
         self.memory = ConversationBufferMemory(k=100)
         
     def cria_banco_de_dados_vetorial(file_path:str) -> None:
@@ -75,7 +76,7 @@ class EDAAgent:
             documents = CSVLoader(file_path).load()
 
             # Usando embeddings do OpenAI
-            #embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+            embeddings = OpenAIEmbeddings(dimensions=1024)
 
             # Cria um banco de dados vetorial usando Chroma
             split_documents = RecursiveCharacterTextSplitter(chunk_size=480, chunk_overlap=100).split_documents(documents)
@@ -89,7 +90,7 @@ class EDAAgent:
     def carrega_banco_de_dados_vetorial(path_documentos:str) -> Chroma:
         try:
             # Carrega o banco de dados vetorial existente
-            #embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+            embeddings = OpenAIEmbeddings()
             vectorstore = Chroma(persist_directory=path_documentos, embedding_function=embeddings)
             return vectorstore
         except Exception as e:
@@ -107,21 +108,18 @@ class EDAAgent:
             docs = retriever.invoke(pergunta)
             contexto = "\n\n".join([doc.page_content for doc in docs])
 
-            vectorstore = EDAAgent.carrega_banco_de_dados_vetorial(f'{OUTPUT_DOCUMENTS_DIR}vectorstore')
-            docs = None
-
             if vectorstore:
                 retriever = vectorstore.as_retriever()
                 docs = retriever.invoke(pergunta)
                 print(docs)
-            else:
-                print("Não foi possível carregar o banco de dados vetorial.")
+        else:
+            print("Não foi possível carregar o banco de dados vetorial.")
         return contexto
 
     def agente_langchain(llm:BaseChatModel) -> dict:
         ferramentas = [PythonAstREPLTool()]
 
-        prompt = hub.pull("hwchase17/react", api_key=os.environ['LANGSMITH_API_KEY'])
+        prompt = hub.pull("hwchase17/react-chat-json", api_key=os.environ['LANGSMITH_API_KEY'])
         print('\n','-'*40,'\n',prompt.template, '\n','-'*40, '\n')
 
         # To query a single csv file
@@ -131,12 +129,43 @@ class EDAAgent:
         #    verbose=True,
         #    agent_type=RunnableAgentType.from_llm_and_tools(llm),
         #)
-        agente = create_react_agent(llm, ferramentas, prompt)
-        executor_do_agente = AgentExecutor(agent=agente, tools=ferramentas, handle_parsing_errors=True)
+        #agente = create_react_agent(llm, ferramentas, prompt)
+        memoria = ConversationBufferMemory(memory_key="chat_history", return_messages=True, input_key="input") # Retorna o histórico como uma lista de objetos de mensagem
+        prompt = PromptTemplate(
+        input_variables=["input", "context", "chat_history", "agent_scratchpad"], # Variáveis de entrada
+        template="""{chat_history}
+            Você é um agente de IA especializado em análise exploratória de dados (EDA).
+            Contexto: {context}
+            Pergunta: {input}
+            {agent_scratchpad}
+        """
+    )
+        agente = create_tool_calling_agent(llm, ferramentas, prompt)
+        executor_do_agente = AgentExecutor(agent=agente, tools=ferramentas, memory=memoria)
+        #executor_do_agente = AgentExecutor(agent=agente, tools=ferramentas, handle_parsing_errors=True)
         return executor_do_agente
     
     def query(self, question):
-        llm = ChatGoogleGenerativeAI(temperature=0, model='gemini-1.5-flash-latest') 
+        #llm = ChatOpenAI() 
+        # use directly
+        embeddings = OpenAIEmbeddings()
+        embedding_function  = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=os.environ['OPENAI_API_KEY'],
+            task_type="RETRIEVAL_DOCUMENT"
+            )
+        embedding_function([embeddings])
+
+        client = chromadb.PersistentClient(path=OUTPUT_DOCUMENTS_DIR)
+        
+        # If the collection already exists, we just return it. This allows us to add more
+    # data to an existing collection.
+        collection = client.get_or_create_collection(name="collection_name", embedding_function=embedding_function
+    )
+
+        # Create ids from the current count
+        count = collection.count()
+        print(f"Collection already contains {count} documents")   
+
         contexto = EDAAgent.busca_na_base_de_documentos(question) or ''
     
         executor_do_agente = EDAAgent.agente_langchain(llm)
