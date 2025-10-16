@@ -4,6 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 import chromadb.utils.embedding_functions as embedding_functions
 from langchain.globals import set_debug
+import httpx
 # Construção de prompts
 from langchain.schema import HumanMessage
 from langchain.prompts import (
@@ -99,7 +100,7 @@ class EDAAgent:
         
     def busca_na_base_de_documentos(pergunta:str) -> str:
         """Você é um especialista em Análise Exploratória de Dados no contexto de fraude de cartão de crédito. 
-        Use esta ferramenta para responder perguntas técnicas, exibir gráficos quando aplicáveis.
+        Use esta ferramenta para responder perguntas técnicas, realizar conclusões a respeito da análise, exibir gráficos quando aplicáveis.
         """
         vectorstore = EDAAgent.carrega_banco_de_dados_vetorial(f'{OUTPUT_DOCUMENTS_DIR}vectorstore')
         contexto = None
@@ -146,21 +147,21 @@ class EDAAgent:
         return executor_do_agente
     
     def query(self, question):
-        #llm = ChatOpenAI() 
+        llm = ChatOpenAI() 
         # use directly
-        embeddings = OpenAIEmbeddings()
+        http_client = httpx.Client(verify="C:/Users/f32w150/Downloads/ZscalerRootCA.cer")
+        embeddings = OpenAIEmbeddings(http_client=http_client)
         embedding_function  = embedding_functions.OpenAIEmbeddingFunction(
             api_key=os.environ['OPENAI_API_KEY'],
-            task_type="RETRIEVAL_DOCUMENT"
             )
         embedding_function([embeddings])
 
         client = chromadb.PersistentClient(path=OUTPUT_DOCUMENTS_DIR)
         
         # If the collection already exists, we just return it. This allows us to add more
-    # data to an existing collection.
+        # data to an existing collection.
         collection = client.get_or_create_collection(name="collection_name", embedding_function=embedding_function
-    )
+        )
 
         # Create ids from the current count
         count = collection.count()

@@ -59,12 +59,16 @@ if df is not None:
         st.session_state.chat_history = []
     agent = st.session_state.eda_agent
 
-    chat_input = st.text_input("Digite sua pergunta:")
+    chat_input = st.chat_input("Digite sua pergunta")
     if st.button("Enviar"):
+        if chat_input := st.chat_message("user"):
+            chat_input.write(chat_input)
+            st.session_state.chat_history.append(("Usuário", chat_input))
         resposta, figs = agent.query(chat_input)
-        st.session_state.chat_history.append(("Usuário", chat_input))
-        st.session_state.chat_history.append(("Agente", resposta))
-        st.write(resposta)
+        if resposta != None:
+            st.chat_message("assistant")
+            resposta.write(resposta)
+            st.session_state.chat_history.append(("Agente", resposta))
         for fig in figs:
             st.pyplot(fig)
     if st.button("Limpar Histórico"): st.session_state.chat_history = []
